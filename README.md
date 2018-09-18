@@ -1,9 +1,9 @@
-# sjson: Fast and portable C single header json Encoder/Decoder
+## sjson: Fast and portable C single header json Encoder/Decoder
 
 This is actually a fork of Joseph's awesome Json encoder/decoder code from his [repo](https://github.com/rustyrussell/ccan/tree/master/ccan/json).    
-If you want to see the performance and analysis of the original encoder/decoder (_ccan/json_) visit [here](https://github.com/miloyip/nativejson-benchmark).  
+If you want to see the performance and analysis of the original encoder/decoder (which is _ccan/json_) visit [here](https://github.com/miloyip/nativejson-benchmark).  
 The encoder/decoder code is almost the same. What I did was adding object pools and string pages (sjson_context)
-that eliminates many micro memory allocations, which should improve encode/decode speed and data access performance
+that eliminates many micro memory allocations, which should improve encode/decode speed and data access performance. 
 I also added malloc/free and libc API overrides, and made the library single header, so it makes it very easy to integrate it into other programs
 
 ### Features
@@ -11,9 +11,9 @@ I also added malloc/free and libc API overrides, and made the library single hea
 - Single header C-file
 - UTF8 support
 - Fast with minimal allocations (Internal Object pool, String pool, ..)
-- Overriable malloc/free/memcpy/.. 
-- Have both Json Decoder/Encoder
-- Encoder supports pretify
+- Overriable libc functions like malloc/free/memcpy/.. 
+- Supports both Json encoding and decoding
+- Encoder supports prettify 
 - No dependencies
 - Simple and easy to use C-API
 
@@ -21,11 +21,6 @@ I also added malloc/free and libc API overrides, and made the library single hea
 
 ```c
 #define SJSON_IMPLEMENTATION
-// In case you want to override allocations
-#define sjson_malloc(user, size)			MyMalloc(user, size)
-#define sjson_free(user, ptr)				MyFree(user, ptr)
-#define sjson_realloc(user, ptr, size)		MyRealloc(user, ptr, size)
-
 #include "sjson.h"	
 ```
 
