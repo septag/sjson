@@ -4,7 +4,7 @@
 //
 // Original code by Joseph A. Adams (joeyadams3.14159@gmail.com)
 // 
-// sjson.h - v1.0.0 - Fast single header json encoder/decoder
+// sjson.h - v1.1.0 - Fast single header json encoder/decoder
 //		This is actually a fork of Joseph's awesome Json encoder/decoder code from his repo:
 //		https://github.com/rustyrussell/ccan/tree/master/ccan/json
 //		The encoder/decoder code is almost the same. What I did was adding object pools and string pages (sjson_context)
@@ -41,7 +41,8 @@
 //	   sjson_destroy_context	Destroys a json context and frees all memory
 //								after the context destroys, all created json nodes will become invalid
 //	   
-//	   sjson_reset_context		Not implemented yet
+//	   sjson_reset_context		Resets the context. No memory will be freed, just resets the buffers so they can be reused
+//								but the DOM nodes and strings will be invalidated next time you parse or decode a json
 //
 //  --- DECODE/ENCODE/VALIDATE
 //	   sjson_decode				Decodes the json text and returns DOM document root node
@@ -57,7 +58,16 @@
 //	   sjson_find_member		Finds an element by name inside object				
 //	   sjson_find_member_nocase	Finds an element by name inside object, ignores case			
 //	   sjson_first_child		Gets first child of Object or Array types		
-//	   sjson_foreach			Iterates through an Object or array child elements, first parameter should be a pre-defined json_node*	
+//	   sjson_foreach			Iterates through an Object or array child elements, first parameter should be a pre-defined json_node*
+//
+// --- HIGHER LEVEL LOOKUP
+//	   sjson_get_int			Gets an integer value from a child of the specified parent node, sets to 'default_val' if node is not found
+//	   sjson_get_float			Gets a float value from a child of the specified parent node, sets to 'default_val' if node is not found
+//	   sjson_get_double			Gets a double value from a child of the specified parent node, sets to 'default_val' if node is not found
+//	   sjson_get_string			Gets a string value from a child of the specified parent node, sets to 'default_val' if node is not found
+// 	   sjson_get_bool			Gets a boolean value from a child of the specified parent node, sets to 'default_val' if node is not found
+//	   sjson_get_floats			Returns float array from a child of the specified parent node, returns false if node is not found or does not have enough elements to fill the variable
+//	   sjson_get_ints			Returns integer array from a child of the specified parent node, returns false if node is not found or does not have enough elements to fill the variable
 //
 // --- CONSTRUCTION
 //	   sjson_mknull				Creates a NULL type json node
@@ -72,6 +82,16 @@
 //	   sjson_prepend_member		Prepends the node to the members of an object, should provide the key name to the element
 //	   sjson_remove_from_parent	Removes the node from it's parrent, if there is any
 //     sjson_delete_node		Deletes the node and all of it's children (object/array)
+//
+// --- HIGHER LEVEL CONSTRUCTION these functions use a combination of above to facilitate some operations
+//	   sjson_put_int			Add an integer value with a key(name) to the child of the specified parent node
+//	   sjson_put_float			Add float value with a key(name) to the child of the specified parent node
+// 	   sjson_put_double			Add double value with a key(name) to the child of the specified parent node
+//	   sjson_put_bool			Add boolean value with a key(name) to the child of the specified parent node
+//	   sjson_put_string			Add string value with a key(name) to the child of the specified parent node
+//	   sjson_put_floats			Add float array with a key(name) to the child of the specified parent node
+//	   sjson_put_ints			Add integer array with a key(name) to the child of the specified parent node
+//	   sjson_put_string			Add string array with a key(name) to the child of the specified parent node
 //     
 // --- DEBUG
 //	   sjson_check				Checks and validates the json DOM node recursively
@@ -103,6 +123,17 @@
 //			#define sjson_free(user, ptr)				MyFree(user, ptr)
 //			#define sjson_realloc(user, ptr, size)		MyRealloc(user, ptr, size)
 //	   		#include "sjson.h"	
+//			...
+//
+// NOTE: on sjson_reset_context
+//			what reset_context does is that is resets the internal buffers without freeing them
+//			this makes context re-usable for the next json document, so don't have to regrow buffers or create another context
+//	   Example:
+//			sjson_context* ctx = sjson_create_context(0, 0, NULL);	// initial creation
+//			sjson_decode(ctx, json1);		// decode json1
+//			...								// do some work on data
+//			sjson_reset_context(ctx);		// reset the buffers, make sure you don't need json1 data
+//			sjson_decode(ctx, json2);		// decode another json
 //			...
 //
 #pragma once
@@ -190,9 +221,18 @@ sjson_node* sjson_find_member(sjson_node* object, const char* key);
 sjson_node* sjson_find_member_nocase(sjson_node* object, const char *name);
 sjson_node* sjson_first_child(const sjson_node* node);
 
+// Higher level lookup/get functions
+int 		sjson_get_int(sjson_node* parent, const char* key, int default_val);
+float 		sjson_get_float(sjson_node* parent, const char* key, float default_val);
+double 		sjson_get_double(sjson_node* parent, const char* key, double default_val);
+const char* sjson_get_string(sjson_node* parent, const char* key, const char* default_val);
+bool 		sjson_get_bool(sjson_node* parent, const char* key, bool default_val);
+bool		sjson_get_floats(float* out, int count, sjson_node* parent, const char* key);
+bool		sjson_get_ints(int* out, int count, sjson_node* parent, const char* key);
+
 #define sjson_foreach(i, object_or_array)            \
 	for ((i) = sjson_first_child(object_or_array);   \
-		 (i) != NULL;                               \
+		 (i) != NULL;                                \
 		 (i) = (i)->next)
 
 // Construction and manipulation 
@@ -211,6 +251,16 @@ void sjson_prepend_member(sjson_context* ctx, sjson_node* object, const char* ke
 void sjson_remove_from_parent(sjson_node* node);
 
 void sjson_delete_node(sjson_context* ctx, sjson_node* node);
+
+// Higher level construction
+sjson_node* sjson_put_int(sjson_context* ctx, sjson_node* parent, const char* key, int val);
+sjson_node* sjson_put_float(sjson_context* ctx, sjson_node* parent, const char* key, float val);
+sjson_node* sjson_put_double(sjson_context* ctx, sjson_node* parent, const char* key, double val);
+sjson_node* sjson_put_bool(sjson_context* ctx, sjson_node* parent, const char* key, bool val);
+sjson_node* sjson_put_string(sjson_context* ctx, sjson_node* parent, const char* key, const char* val);
+sjson_node* sjson_put_floats(sjson_context* ctx, sjson_node* parent, const char* key, const float* vals, int count);
+sjson_node* sjson_put_ints(sjson_context* ctx, sjson_node* parent, const char* key, const int* vals, int count);
+sjson_node* sjson_put_strings(sjson_context* ctx, sjson_node* parent, const char* key, const char** vals, int count);
 
 // Debugging
 
@@ -316,18 +366,18 @@ bool sjson_check(const sjson_node* node, char errmsg[256]);
 
 typedef struct sjson__str_page
 {
-    int					   offset;
-    int					   size;
+    int					    offset;
+    int					    size;
     struct sjson__str_page* next;
     struct sjson__str_page* prev;
 } sjson__str_page;
 
 typedef struct sjson__node_page
 {
-    int 				    iter;
-    int 				    capacity;
-    sjson_node** 		    ptrs;
-    sjson_node* 			    buff;
+    int 				     iter;
+    int 				     capacity;
+    sjson_node** 		     ptrs;
+    sjson_node* 			 buff;
     struct sjson__node_page* next;
     struct sjson__node_page* prev;
 } sjson__node_page;
@@ -392,7 +442,7 @@ static inline void sjson__sb_put(sjson_context* ctx, sjson__sb* sb, const char *
 	sb->cur += count;
 }
 
-#define sb_putc(ctx, sb, c) do {         \
+#define sjson__sb_putc(ctx, sb, c) do {         \
 		if ((sb)->cur >= (sb)->end) \
 			sjson__sb_grow(ctx, sb, 1);         \
 		*(sb)->cur++ = (c);         \
@@ -621,7 +671,20 @@ void sjson_destroy_context(sjson_context* ctx)
 
 void sjson_reset_context(sjson_context* ctx)
 {
-	// TODO: reset all node pools
+	// 
+	for (sjson__node_page* npage = ctx->node_pages; npage; npage = npage->next) {
+		int capacity = npage->capacity;
+		npage->iter = capacity;
+		for (int i = 0; i < capacity; i++)
+	        npage->ptrs[capacity - i - 1] = &npage->buff[i];
+	}
+
+	// 
+	for (sjson__str_page* spage = ctx->str_pages; spage; spage = spage->next) {
+		spage->offset = 0;
+	}
+
+	// TODO: maybe we can reverse the linked-lists to get better cache coherency
 }
 
 static inline sjson_node* sjson__new_node(sjson_context* ctx, sjson_tag tag)
@@ -1119,12 +1182,98 @@ sjson_node* sjson_find_member_nocase(sjson_node* object, const char *name)
 	return NULL;	
 }
 
-
 sjson_node *sjson_first_child(const sjson_node *node)
 {
 	if (node != NULL && (node->tag == SJSON_ARRAY || node->tag == SJSON_OBJECT))
 		return node->children.head;
 	return NULL;
+}
+
+int sjson_get_int(sjson_node* parent, const char* key, int default_val)
+{
+	sjson_node* p = sjson_find_member(parent, key);
+	if (p) {
+		sjson_assert(p->tag == SJSON_NUMBER);
+		return (int)p->number_;
+	} else {
+		return default_val;
+	}
+}
+
+float sjson_get_float(sjson_node* parent, const char* key, float default_val)
+{
+	sjson_node* p = sjson_find_member(parent, key);
+	if (p) {
+		sjson_assert(p->tag == SJSON_NUMBER);
+		return (float)p->number_;
+	} else {
+		return default_val;
+	}	
+}
+
+double sjson_get_double(sjson_node* parent, const char* key, double default_val)
+{
+	sjson_node* p = sjson_find_member(parent, key);
+	if (p) {
+		sjson_assert(p->tag == SJSON_NUMBER);
+		return p->number_;
+	} else {
+		return default_val;
+	}
+}
+
+const char* sjson_get_string(sjson_node* parent, const char* key, const char* default_val)
+{
+	sjson_node* p = sjson_find_member(parent, key);
+	if (p) {
+		sjson_assert(p->tag == SJSON_STRING);
+		return p->string_;
+	} else {
+		return default_val;
+	}
+}
+
+bool sjson_get_bool(sjson_node* parent, const char* key, bool default_val)
+{
+	sjson_node* p = sjson_find_member(parent, key);
+	if (p) {
+		sjson_assert(p->tag == SJSON_BOOL);
+		return p->bool_;
+	} else {
+		return default_val;
+	}
+}
+
+bool sjson_get_floats(float* out, int count, sjson_node* parent, const char* key)
+{
+	sjson_node* p = sjson_find_member(parent, key);
+	if (p) {
+		sjson_assert(p->tag == SJSON_ARRAY);
+		int index = 0;
+		for (sjson_node* elem = p->children.head; elem && index < count; elem = elem->next) {
+			sjson_assert(elem->tag == SJSON_NUMBER);
+			out[index++] = (float)elem->number_;
+		}
+		return index == count;
+	} else {
+		return false;
+	}
+}
+
+bool sjson_get_ints(int* out, int count, sjson_node* parent, const char* key)
+{
+	sjson_node* p = sjson_find_member(parent, key);
+	if (p) {
+		sjson_assert(p->tag == SJSON_ARRAY);
+		int index = 0;
+		for (sjson_node* elem = p->children.head; elem && index < count; elem = elem->next) {
+			sjson_assert(elem->tag == SJSON_NUMBER);
+			out[index++] = (int)elem->number_;
+		}
+		return index == count;
+	} else {
+		return false;
+	}
 }
 
 sjson_node *sjson_mknull(sjson_context* ctx)
@@ -1251,6 +1400,85 @@ void sjson_remove_from_parent(sjson_node *node)
 		node->prev = node->next = NULL;
 		node->key = NULL;
 	}
+}
+
+sjson_node* sjson_put_int(sjson_context* ctx, sjson_node* parent, const char* key, int val)
+{
+	sjson_node* n = sjson_mknumber(ctx, (double)val);
+	sjson_assert(n);
+	sjson_append_member(ctx, parent, key, n);
+	return n;
+}
+
+sjson_node* sjson_put_float(sjson_context* ctx, sjson_node* parent, const char* key, float val)
+{
+	sjson_node* n = sjson_mknumber(ctx, (double)val);
+	sjson_assert(n);
+	sjson_append_member(ctx, parent, key, n);
+	return n;
+}
+
+sjson_node* sjson_put_double(sjson_context* ctx, sjson_node* parent, const char* key, double val)
+{
+	sjson_node* n = sjson_mknumber(ctx, val);
+	sjson_assert(n);
+	sjson_append_member(ctx, parent, key, n);
+	return n;
+}
+
+sjson_node* sjson_put_bool(sjson_context* ctx, sjson_node* parent, const char* key, bool val)
+{
+	sjson_node* n = sjson_mkbool(ctx, val);
+	sjson_assert(n);
+	sjson_append_member(ctx, parent, key, n);
+	return n;
+}
+
+sjson_node* sjson_put_string(sjson_context* ctx, sjson_node* parent, const char* key, const char* val)
+{
+	sjson_node* n = sjson_mkstring(ctx, val);
+	sjson_assert(n);
+	sjson_append_member(ctx, parent, key, n);
+	return n;
+}
+
+sjson_node* sjson_put_floats(sjson_context* ctx, sjson_node* parent, const char* key, const float* vals, int count)
+{
+	sjson_node* a = sjson_mkarray(ctx);
+	sjson_assert(a);
+	for (int i = 0; i < count; i++) {
+		sjson_node* n = sjson_mknumber(ctx, (double)vals[i]);
+		sjson_assert(n);
+		sjson_append_element(a, n);
+	}
+	sjson_append_member(ctx, parent, key, a);
+	return a;
+}
+
+sjson_node* sjson_put_ints(sjson_context* ctx, sjson_node* parent, const char* key, const int* vals, int count)
+{
+	sjson_node* a = sjson_mkarray(ctx);
+	sjson_assert(a);
+	for (int i = 0; i < count; i++) {
+		sjson_node* n = sjson_mknumber(ctx, (double)vals[i]);
+		sjson_assert(n);
+		sjson_append_element(a, n);
+	}
+	sjson_append_member(ctx, parent, key, a);
+	return a;
+}
+
+sjson_node* sjson_put_strings(sjson_context* ctx, sjson_node* parent, const char* key, const char** vals, int count)
+{
+	sjson_node* a = sjson_mkarray(ctx);
+	sjson_assert(a);
+	for (int i = 0; i < count; i++) {
+		sjson_node* n = sjson_mkstring(ctx, vals[i]);
+		sjson_assert(n);
+		sjson_append_element(a, n);
+	}
+	sjson_append_member(ctx, parent, key, a);
+	return a;
 }
 
 static bool sjson__parse_value(sjson_context* ctx, const char **sp, sjson_node **out)
@@ -1660,13 +1888,13 @@ static void sjson__emit_array(sjson_context* ctx, sjson__sb* out, const sjson_no
 {
 	const sjson_node *element;
 	
-	sb_putc(ctx, out, '[');
+	sjson__sb_putc(ctx, out, '[');
 	sjson_foreach(element, array) {
 		sjson__emit_value(ctx, out, element);
 		if (element->next != NULL)
-			sb_putc(ctx, out, ',');
+			sjson__sb_putc(ctx, out, ',');
 	}
-	sb_putc(ctx, out, ']');
+	sjson__sb_putc(ctx, out, ']');
 }
 
 static void sjson__emit_array_indented(sjson_context* ctx, sjson__sb* out, const sjson_node *array, const char *space, int indent_level)
@@ -1690,22 +1918,22 @@ static void sjson__emit_array_indented(sjson_context* ctx, sjson__sb* out, const
 	}
 	for (i = 0; i < indent_level; i++)
 		sjson__sb_puts(ctx, out, space);
-	sb_putc(ctx, out, ']');
+	sjson__sb_putc(ctx, out, ']');
 }
 
 static void sjson__emit_object(sjson_context* ctx, sjson__sb* out, const sjson_node *object)
 {
 	const sjson_node *member;
 	
-	sb_putc(ctx, out, '{');
+	sjson__sb_putc(ctx, out, '{');
 	sjson_foreach(member, object) {
 		sjson__emit_string(ctx, out, member->key);
-		sb_putc(ctx, out, ':');
+		sjson__sb_putc(ctx, out, ':');
 		sjson__emit_value(ctx, out, member);
 		if (member->next != NULL)
-			sb_putc(ctx, out, ',');
+			sjson__sb_putc(ctx, out, ',');
 	}
-	sb_putc(ctx, out, '}');
+	sjson__sb_putc(ctx, out, '}');
 }
 
 static void sjson__emit_object_indented(sjson_context* ctx, sjson__sb* out, const sjson_node *object, const char *space, int indent_level)
@@ -1731,7 +1959,7 @@ static void sjson__emit_object_indented(sjson_context* ctx, sjson__sb* out, cons
 	}
 	for (i = 0; i < indent_level; i++)
 		sjson__sb_puts(ctx, out, space);
-	sb_putc(ctx, out, '}');
+	sjson__sb_putc(ctx, out, '}');
 }
 
 void sjson__emit_string(sjson_context* ctx, sjson__sb* out, const char *str)
@@ -2016,4 +2244,6 @@ bool sjson_check(const sjson_node* node, char errmsg[256])
 //
 // Version History:
 //			1.0.0			Initial release
+//			1.1.0			Added higher level json get/put functions
+//							Implemented sjson_reset_context
 //
