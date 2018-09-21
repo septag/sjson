@@ -348,7 +348,7 @@ bool sjson_check(const sjson_node* node, char errmsg[256]);
 #		define sjson_stricmp(_a, _b) 	 _stricmp(_a, _b)
 #	else                           
 #		include <string.h>         
-#		define sjson_stricmp(_a, _b) 	 strcasecmp(s1, s2)
+#		define sjson_stricmp(_a, _b) 	 strcasecmp(_a, _b)
 #	endif	
 #endif
 
