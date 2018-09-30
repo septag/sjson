@@ -4,7 +4,7 @@
 //
 // Original code by Joseph A. Adams (joeyadams3.14159@gmail.com)
 // 
-// sjson.h - v1.1.0 - Fast single header json encoder/decoder
+// sjson.h - v1.1.1 - Fast single header json encoder/decoder
 //		This is actually a fork of Joseph's awesome Json encoder/decoder code from his repo:
 //		https://github.com/rustyrussell/ccan/tree/master/ccan/json
 //		The encoder/decoder code is almost the same. What I did was adding object pools and string pages (sjson_context)
@@ -84,6 +84,8 @@
 //     sjson_delete_node		Deletes the node and all of it's children (object/array)
 //
 // --- HIGHER LEVEL CONSTRUCTION these functions use a combination of above to facilitate some operations
+//     sjson_put_obj            Add an object with a key(name) to the child of the parent node
+//     sjson_put_array          Add an array with a key(name) to the child of the parent node
 //	   sjson_put_int			Add an integer value with a key(name) to the child of the specified parent node
 //	   sjson_put_float			Add float value with a key(name) to the child of the specified parent node
 // 	   sjson_put_double			Add double value with a key(name) to the child of the specified parent node
@@ -112,6 +114,7 @@
 //			- sjson_stricmp
 //			- sjson_strcpy
 //			- sjson_strcmp
+//          - sjson_snprintf
 //		 MEMORY 
 //			- sjson_memcpy
 //			- sjson_memset
@@ -253,6 +256,8 @@ void sjson_remove_from_parent(sjson_node* node);
 void sjson_delete_node(sjson_context* ctx, sjson_node* node);
 
 // Higher level construction
+sjson_node* sjson_put_obj(sjson_context* ctx, sjson_node* parent, const char* key);
+sjson_node* sjson_put_array(sjson_context* ctx, sjson_node* parent, const char* key);
 sjson_node* sjson_put_int(sjson_context* ctx, sjson_node* parent, const char* key, int val);
 sjson_node* sjson_put_float(sjson_context* ctx, sjson_node* parent, const char* key, float val);
 sjson_node* sjson_put_double(sjson_context* ctx, sjson_node* parent, const char* key, double val);
@@ -302,6 +307,10 @@ bool sjson_check(const sjson_node* node, char errmsg[256]);
   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
   THE SOFTWARE.
 */
+
+#ifndef sjson_strcpy
+#   define __STDC_WANT_LIB_EXT1__ 1
+#endif
 
 #include <stdint.h>
 
@@ -359,7 +368,7 @@ bool sjson_check(const sjson_node* node, char errmsg[256]);
 
 #ifndef sjson_strcpy
 #	include <string.h>
-#	define sjson_strcpy(_a, _b)			 strcpy(_a, _b)
+#   define sjson_strcpy(_a, _s, _b)      strcpy_s(_a, _s, _b)
 #endif
 
 #define sjson__align_mask(_value, _mask) ( ( (_value)+(_mask) ) & ( (~0)&(~(_mask) ) ) )
@@ -1402,6 +1411,20 @@ void sjson_remove_from_parent(sjson_node *node)
     }
 }
 
+sjson_node* sjson_put_obj(sjson_context* ctx, sjson_node* parent, const char* key)
+{
+    sjson_node* n = sjson_mkobject(ctx);
+    sjson_append_member(ctx, parent, key, n);
+    return n;
+}
+
+sjson_node* sjson_put_array(sjson_context* ctx, sjson_node* parent, const char* key)
+{
+    sjson_node* n = sjson_mkarray(ctx);
+    sjson_append_member(ctx, parent, key, n);
+    return n;    
+}
+
 sjson_node* sjson_put_int(sjson_context* ctx, sjson_node* parent, const char* key, int val)
 {
     sjson_node* n = sjson_mknumber(ctx, (double)val);
@@ -2028,12 +2051,12 @@ void sjson__emit_string(sjson_context* ctx, sjson__sb* out, const char *str)
                      */
                     sjson_assert(false);
                     if (escape_unicode) {
-                        sjson_strcpy(b, "\\uFFFD");
+                        sjson_strcpy(b, 7, "\\uFFFD");
                         b += 6;
                     } else {
-                        *b++ = 0xEF;
-                        *b++ = 0xBF;
-                        *b++ = 0xBD;
+                        *b++ = (char)0xEF;
+                        *b++ = (char)0xBF;
+                        *b++ = (char)0xBD;
                     }
                     s++;
                 } else if (c < 0x1F || (c >= 0x80 && escape_unicode)) {
@@ -2090,7 +2113,7 @@ static void sjson__emit_number(sjson_context* ctx, sjson__sb* out, double num)
      * like 0.3 -> 0.299999999999999988898 .
      */
     char buf[64];
-    sprintf(buf, "%.16g", num);
+    sjson_snprintf(buf, sizeof(buf), "%.16g", num);
     
     if (sjson__number_is_valid(buf))
         sjson__sb_puts(ctx, out, buf);
@@ -2246,4 +2269,5 @@ bool sjson_check(const sjson_node* node, char errmsg[256])
 //			1.0.0			Initial release
 //			1.1.0			Added higher level json get/put functions
 //							Implemented sjson_reset_context
+//          1.1.1           Fixed some macro defines (sjson_strcpy, sjson_snprintf)
 //

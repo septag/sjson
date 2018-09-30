@@ -1,4 +1,5 @@
 ## sjson: Fast and portable C single header json Encoder/Decoder
+[@septag](https://twitter.com/septagh)
 
 This is actually a fork of Joseph's awesome Json encoder/decoder code from his [repo](https://github.com/rustyrussell/ccan/tree/master/ccan/json).    
 If you want to see the performance and analysis of the original encoder/decoder (which is _ccan/json_) visit [here](https://github.com/miloyip/nativejson-benchmark).  
