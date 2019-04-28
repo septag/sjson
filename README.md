@@ -21,7 +21,7 @@ I also added malloc/free and libc API overrides, and made the library single hea
 ### Usage
 
 ```c
-#define SJSON_IMPLEMENTATION
+#define SJSON_IMPLEMENT
 #include "sjson.h"	
 ```
 
