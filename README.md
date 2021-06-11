@@ -27,6 +27,9 @@ I also added malloc/free and libc API overrides, and made the library single hea
 
 For more information, check out the header file itself.
 
+### Links
+- [cj5](https://github.com/septag/cj5): Fast single header Json5 parser based on [jsmn](https://github.com/zserge/jsmn)
+
 [License (BSD 2-clause)](https://github.com/septag/sjson/blob/master/LICENSE)
 --------------------------------------------------------------------------
 
