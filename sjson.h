@@ -4,7 +4,7 @@
 //
 // Original code by Joseph A. Adams (joeyadams3.14159@gmail.com)
 // 
-// sjson.h - v1.1.1 - Fast single header json encoder/decoder
+// sjson.h - v1.2.0 - Fast single header json encoder/decoder
 //		This is actually a fork of Joseph's awesome Json encoder/decoder code from his repo:
 //		https://github.com/rustyrussell/ccan/tree/master/ccan/json
 //		The encoder/decoder code is almost the same. What I did was adding object pools and string pages (sjson_context)
@@ -62,6 +62,7 @@
 //
 // --- HIGHER LEVEL LOOKUP
 //	   sjson_get_int			Gets an integer value from a child of the specified parent node, sets to 'default_val' if node is not found
+//     sjson_get_int64          Gets an 64-bit integer value from a child of the specified parent node, sets to 'default_val' if node is not found
 //	   sjson_get_float			Gets a float value from a child of the specified parent node, sets to 'default_val' if node is not found
 //	   sjson_get_double			Gets a double value from a child of the specified parent node, sets to 'default_val' if node is not found
 //	   sjson_get_string			Gets a string value from a child of the specified parent node, sets to 'default_val' if node is not found
@@ -101,7 +102,7 @@
 //
 // IMPLEMENTATION:
 //	
-//	   To include and implement sjson in your project, you should define SJSON_IMPLEMENTATION before including sjson.h
+//	   To include and implement sjson in your project, you should define SJSON_IMPLEMENT before including sjson.h
 //	   You can also override memory allocation or any libc functions that the library uses to your own
 //	   Here's a list of stuff that can be overriden:
 //		 ALLOCATIONS
@@ -121,7 +122,7 @@
 //			- sjson_out_of_memory			happens when sjson cannot allocate memory internally
 //											Default behaviour is that it asserts and exits the program
 //	   Example:
-//			#define SJSON_IMPLEMENTATION
+//			#define SJSON_IMPLEMENT
 //			#define sjson_malloc(user, size)			MyMalloc(user, size)
 //			#define sjson_free(user, ptr)				MyFree(user, ptr)
 //			#define sjson_realloc(user, ptr, size)		MyRealloc(user, ptr, size)
@@ -164,6 +165,7 @@ typedef unsigned char _Bool;
 #   include <stdbool.h>
 #endif
 #include <stddef.h>
+#include <stdint.h>
 
 // Json DOM object type
 typedef enum sjson_tag {
@@ -227,6 +229,7 @@ int         sjson_child_count(const sjson_node* node);
 
 // Higher level lookup/get functions
 int 		sjson_get_int(sjson_node* parent, const char* key, int default_val);
+int64_t     sjson_get_int64(sjson_node* parent, const char* key, int64_t default_val);
 float 		sjson_get_float(sjson_node* parent, const char* key, float default_val);
 double 		sjson_get_double(sjson_node* parent, const char* key, double default_val);
 const char* sjson_get_string(sjson_node* parent, const char* key, const char* default_val);
@@ -263,6 +266,7 @@ void sjson_delete_node(sjson_context* ctx, sjson_node* node);
 sjson_node* sjson_put_obj(sjson_context* ctx, sjson_node* parent, const char* key);
 sjson_node* sjson_put_array(sjson_context* ctx, sjson_node* parent, const char* key);
 sjson_node* sjson_put_int(sjson_context* ctx, sjson_node* parent, const char* key, int val);
+sjson_node* sjson_put_int64(sjson_context* ctx, sjson_node* parent, const char* key, int64_t val);
 sjson_node* sjson_put_float(sjson_context* ctx, sjson_node* parent, const char* key, float val);
 sjson_node* sjson_put_double(sjson_context* ctx, sjson_node* parent, const char* key, double val);
 sjson_node* sjson_put_bool(sjson_context* ctx, sjson_node* parent, const char* key, bool val);
@@ -319,10 +323,9 @@ bool sjson_check(const sjson_node* node, char errmsg[256]);
 #   define __STDC_WANT_LIB_EXT1__ 1
 #endif
 
-#include <stdint.h>
+#include <stdlib.h>
 
 #ifndef sjson_malloc
-#	include <stdlib.h>
 #	include <string.h>
 #	define sjson_malloc(user, size)		  malloc(size)
 #	define sjson_free(user, ptr)		  free(ptr)
@@ -1229,6 +1232,17 @@ int sjson_get_int(sjson_node* parent, const char* key, int default_val)
     }
 }
 
+int64_t sjson_get_int64(sjson_node* parent, const char* key, int64_t default_val)
+{
+    sjson_node* p = sjson_find_member(parent, key);
+    if (p) {
+        sjson_assert(p->tag == SJSON_NUMBER);
+        return (int64_t)p->number_;
+    } else {
+        return default_val;
+    }
+}
+
 float sjson_get_float(sjson_node* parent, const char* key, float default_val)
 {
     sjson_node* p = sjson_find_member(parent, key);
@@ -1501,6 +1515,14 @@ sjson_node* sjson_put_int(sjson_context* ctx, sjson_node* parent, const char* ke
     return n;
 }
 
+sjson_node* sjson_put_int64(sjson_context* ctx, sjson_node* parent, const char* key, int64_t val)
+{
+    sjson_node* n = sjson_mknumber(ctx, (double)val);
+    sjson_assert(n);
+    sjson_append_member(ctx, parent, key, n);
+    return n;
+}
+
 sjson_node* sjson_put_float(sjson_context* ctx, sjson_node* parent, const char* key, float val)
 {
     sjson_node* n = sjson_mknumber(ctx, (double)val);
@@ -1644,7 +1666,7 @@ static bool sjson__parse_value(sjson_context* ctx, const char **sp, sjson_node *
             return false;
         
         case '"': {
-            char *str;
+            char *str = NULL;
             if (sjson__parse_string(ctx, &s, out ? &str : NULL)) {
                 if (out)
                     *out = sjson__mkstring(ctx, str);
@@ -1669,7 +1691,7 @@ static bool sjson__parse_value(sjson_context* ctx, const char **sp, sjson_node *
             return false;
         
         default: {
-            double num;
+            double num = 0;
             if (sjson__parse_number(&s, out ? &num : NULL)) {
                 if (out)
                     *out = sjson_mknumber(ctx, num);
@@ -1685,7 +1707,7 @@ static bool sjson__parse_array(sjson_context* ctx, const char **sp, sjson_node *
 {
     const char *s = *sp;
     sjson_node *ret = out ? sjson_mkarray(ctx) : NULL;
-    sjson_node *element;
+    sjson_node *element = NULL;
     
     if (*s++ != '[')
         goto failure;
@@ -1729,8 +1751,8 @@ static bool sjson__parse_object(sjson_context* ctx, const char **sp, sjson_node 
 {
     const char *s = *sp;
     sjson_node *ret = out ? sjson_mkobject(ctx) : NULL;
-    char *key;
-    sjson_node *value;
+    char *key = NULL;
+    sjson_node *value = NULL;
     
     if (*s++ != '{')
         goto failure;

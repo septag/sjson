@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define SJSON_IMPLEMENTATION
+#define SJSON_IMPLEMENT
 #include "../sjson.h"
 
 int main(int argc, char* argv[])
